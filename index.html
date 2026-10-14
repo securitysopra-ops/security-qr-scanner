@@ -244,7 +244,10 @@
     }
   }
 
-  startBtn.addEventListener('click', startScanner);
+  startBtn.addEventListener('click', function() {
+  setStatus('Tombol berfungsi. Menjalankan kamera...');
+  startScanner();
+});
   stopBtn.addEventListener('click', stopScanner);
 
   document.getElementById('copyBtn').addEventListener(
