@@ -224,18 +224,16 @@
         stopBtn.disabled = false;
         setStatus('Kamera aktif. Arahkan ke QR karyawan.');
       }
+    
     } catch (err) {
       if (scanner === current) scanner = null;
-
       try {
         await current.clear();
-      } catch (clearErr) {
-        // Tidak perlu tindakan tambahan.
-      }
+      } catch (clearErr) {}
 
       setStatus(
         'Kamera gagal dibuka. Pastikan halaman memakai HTTPS, ' +
-        izin kamera browser aktif, dan tidak ada aplikasi lain yang memakai kamera. ' +
+        'izin kamera browser aktif, dan tidak ada aplikasi lain yang memakai kamera. ' +
         'Detail: ' + (err.message || String(err))
       );
     } finally {
@@ -243,12 +241,14 @@
       startBtn.disabled = false;
     }
   }
-
+  
   startBtn.addEventListener('click', function() {
-  setStatus('Tombol berfungsi. Menjalankan kamera...');
-  startScanner();
-});
+    setStatus('Tombol berfungsi. Menjalankan kamera...');
+    startScanner();
+  });
+
   stopBtn.addEventListener('click', stopScanner);
+
 
   document.getElementById('copyBtn').addEventListener(
     'click',
