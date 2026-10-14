@@ -1,0 +1,274 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Security QR Scanner</title>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #f1f5f9;
+      color: #1e293b;
+      font-family: Arial, sans-serif;
+    }
+
+    main {
+      max-width: 520px;
+      margin: 20px auto;
+      padding: 24px;
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 4px 18px #0f172a12;
+    }
+
+    h1 { font-size: 23px; margin-top: 0; }
+    p { line-height: 1.5; color: #64748b; }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: white;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }
+
+    button:disabled { opacity: .5; }
+
+    #reader {
+      width: 100%;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+
+    #status {
+      padding: 12px;
+      margin-top: 16px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+    }
+
+    #result {
+      display: none;
+      margin-top: 20px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      margin-top: 8px;
+      padding: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+
+    .warning { font-size: 12px; }
+  </style>
+</head>
+
+<body>
+<main>
+  <h1>Security QR Scanner</h1>
+
+  <p>
+    Arahkan kamera ke QR izin karyawan yang berlaku.
+    Halaman ini hanya membaca QR, bukan menyetujui izin.
+  </p>
+
+  <button id="startBtn" type="button">
+    Buka Kamera
+  </button>
+
+  <button id="stopBtn" class="secondary" type="button" disabled>
+    Tutup Kamera
+  </button>
+
+  <div id="reader"></div>
+
+  <div id="status" role="status" aria-live="polite">
+    Kamera belum diaktifkan.
+  </div>
+
+  <section id="result">
+    <h3>QR berhasil dibaca</h3>
+    <p>Periksa hasilnya. Jangan bagikan token kepada orang lain.</p>
+
+    <textarea id="tokenOutput" readonly
+      aria-label="Hasil pembacaan QR"></textarea>
+
+    <button id="copyBtn" type="button">
+      Salin Hasil QR
+    </button>
+  </section>
+
+  <p class="warning">
+    Hasil pembacaan bukan bukti persetujuan.
+    Selalu lakukan validasi melalui aplikasi HR resmi.
+  </p>
+</main>
+
+<script>
+  let scanner = null;
+  let starting = false;
+  let stopping = false;
+  let scanCompleted = false;
+
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const statusBox = document.getElementById('status');
+  const resultBox = document.getElementById('result');
+  const tokenOutput = document.getElementById('tokenOutput');
+
+  function setStatus(message) {
+    statusBox.textContent = message;
+  }
+
+  async function stopScanner() {
+    if (stopping) return;
+    stopping = true;
+
+    const current = scanner;
+    scanner = null;
+
+    stopBtn.disabled = true;
+
+    try {
+      if (current && current.isScanning) {
+        await current.stop();
+      }
+    } catch (err) {
+      // Abaikan jika kamera sudah berhenti.
+    }
+
+    try {
+      if (current) await current.clear();
+    } catch (err) {
+      // Abaikan jika tampilan sudah dibersihkan.
+    }
+
+    stopping = false;
+    startBtn.disabled = false;
+  }
+
+  async function startScanner() {
+    if (starting || scanner) return;
+
+    if (typeof Html5Qrcode === 'undefined') {
+      setStatus(
+        'Library scanner gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.'
+      );
+      return;
+    }
+
+    starting = true;
+    scanCompleted = false;
+    startBtn.disabled = true;
+    resultBox.style.display = 'none';
+    tokenOutput.value = '';
+    setStatus('Meminta izin kamera...');
+
+    const current = new Html5Qrcode('reader');
+    scanner = current;
+
+    try {
+      await current.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1
+        },
+        async function(decodedText) {
+          if (
+            scanner !== current ||
+            scanCompleted
+          ) return;
+
+          scanCompleted = true;
+
+          // Tampilkan persis isi QR; jangan kirim ke server otomatis.
+          tokenOutput.value = decodedText;
+          resultBox.style.display = 'block';
+          setStatus('QR terbaca. Salin hasil lalu validasi melalui aplikasi HR.');
+
+          await stopScanner();
+        },
+        function() {
+          // Frame tanpa QR tidak perlu ditampilkan sebagai error.
+        }
+      );
+
+      if (scanner === current) {
+        stopBtn.disabled = false;
+        setStatus('Kamera aktif. Arahkan ke QR karyawan.');
+      }
+    } catch (err) {
+      if (scanner === current) scanner = null;
+
+      try {
+        await current.clear();
+      } catch (clearErr) {
+        // Tidak perlu tindakan tambahan.
+      }
+
+      setStatus(
+        'Kamera gagal dibuka. Pastikan halaman memakai HTTPS, ' +
+        izin kamera browser aktif, dan tidak ada aplikasi lain yang memakai kamera. ' +
+        'Detail: ' + (err.message || String(err))
+      );
+    } finally {
+      starting = false;
+      startBtn.disabled = false;
+    }
+  }
+
+  startBtn.addEventListener('click', startScanner);
+  stopBtn.addEventListener('click', stopScanner);
+
+  document.getElementById('copyBtn').addEventListener(
+    'click',
+    async function() {
+      const value = tokenOutput.value;
+      if (!value) return;
+
+      try {
+        await navigator.clipboard.writeText(value);
+        setStatus('Hasil QR berhasil disalin.');
+      } catch (err) {
+        tokenOutput.focus();
+        tokenOutput.select();
+        setStatus('Pilih dan salin teks QR secara manual.');
+      }
+    }
+  );
+
+  window.addEventListener('pagehide', function() {
+    if (scanner && scanner.isScanning) {
+      scanner.stop().catch(function() {});
+    }
+  });
+</script>
+</body>
+</html>
